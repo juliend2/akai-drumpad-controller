@@ -27,6 +27,7 @@ then you're good to go. you can then tap some drums and adjust some knobs, and i
 
 */
 
+// TODO: make this a bool instead of an int:
 static int running = 1;
 
 void signal_handler(int sig) {
@@ -38,9 +39,15 @@ int main() {
     snd_seq_event_t *ev;
     int client_id, port_id;
     int status;
+
+    // AKAI LPD8 drumpad specific:
+    int drumpad_client_id = 24; // This value is likely to change after a
+                                // reboot
+    int drumpad_port_id = 0; // This is likely to stay the same all the time
     
     // Set up signal handler for clean exit
-    signal(SIGINT, signal_handler);
+    signal(SIGINT, signal_handler); // Next iteration of the WHILE below will
+                                    // cause the process to exit().
     
     // Open ALSA sequencer
     status = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0);
@@ -50,7 +57,11 @@ int main() {
     }
     
     // Set our client name
-    snd_seq_set_client_name(seq_handle, "LPD8 Monitor");
+    snd_seq_set_client_name(seq_handle, "LPD8 Monitor"); // "Monitor" as in the
+                                                         // speaker that the
+                                                         // musicin hears to
+                                                         // know what he's
+                                                         // doing?
     
     // Create input port
     port_id = snd_seq_create_simple_port(seq_handle, "Input",
@@ -64,11 +75,12 @@ int main() {
     
     client_id = snd_seq_client_id(seq_handle);
     
-    // Connect to LPD8 (client 20, port 0)
-    status = snd_seq_connect_from(seq_handle, port_id, 20, 0);
+    // Connect to LPD8
+    status = snd_seq_connect_from(seq_handle, port_id, drumpad_client_id, drumpad_port_id);
     if (status < 0) {
         printf("Error connecting to LPD8: %s\n", snd_strerror(status));
-        printf("Make sure LPD8 is connected and try: aconnect 20:0 %d:%d\n", client_id, port_id);
+        printf("Make sure LPD8 is connected and try: aconnect %d:%d %d:%d\n",
+            drumpad_client_id, drumpad_port_id, client_id, port_id);
         snd_seq_delete_simple_port(seq_handle, port_id);
         snd_seq_close(seq_handle);
         return 1;
@@ -113,15 +125,19 @@ int main() {
                     break;
             }
             
-            snd_seq_free_event(ev);
+            // snd_seq_free_event(ev); // Commented out. See deprecation note
+            // here:
+            // https://www.alsa-project.org/alsa-doc/alsa-lib/group___seq_event.html#ga6a4edcdaec5d55e61c8db1a0fbb2daa9
         }
         
         // Small delay to prevent excessive CPU usage
-        usleep(1000);
+        usleep(1000); // suspend execution for microsecond intervals
+                      // So 1000 microseconds = 1 millisecond. Which is still
+                      // fast, to the human perception.
     }
     
     // Cleanup
-    snd_seq_disconnect_from(seq_handle, port_id, 20, 0);
+    snd_seq_disconnect_from(seq_handle, port_id, drumpad_client_id, drumpad_port_id);
     snd_seq_delete_simple_port(seq_handle, port_id);
     snd_seq_close(seq_handle);
     printf("\nDisconnected from AKAI LPD8.\n");
